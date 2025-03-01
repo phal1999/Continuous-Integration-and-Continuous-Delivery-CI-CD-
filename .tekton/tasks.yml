@@ -1,20 +1,48 @@
+---
 apiVersion: tekton.dev/v1beta1
 kind: Task
-name: cleanup
-spec.workspaces.name: source
-
+metadata:
+  name: cleanup-workspace
 spec:
   description: This task will clean up a workspace by deleting all the files.
   workspaces:
-    - name: remove
+    - name: shared-workspace
   steps:
-    - name: remove
-      image: alpine:3
+    - name: cleanup
+      image: alpine:latest
       env:
-        - name: WORKSPACE_SOURCE_PATH
-          value: $(workspaces.source.path)
-      workingDir: $(workspaces.source.path)
+        - name: WORKSPACE_PATH
+          value: "/workspace/shared-workspace"
+      workingDir: /workspace/shared-workspace
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
-      script: script.sh
+        runAsNonRoot: true
+        runAsUser: 1000
+      script: |
+        #!/bin/sh
+        echo "Cleaning up workspace..."
+        rm -rf $WORKSPACE_PATH/*
+        echo "Cleanup completed."
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: nose
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: args
+      description: Arguments to pass to nose
+      type: string
+      default: "-v"
+  steps:
+    - name: nosetests
+      image: python:3.9-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/bash
+        set -e
+        python -m pip install --upgrade pip wheel
+        pip install -r requirements.txt
+        nosetests $(params.args)
